@@ -1,8 +1,9 @@
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox, QProgressBar, QScrollArea, QGridLayout, QSizePolicy, QAbstractItemView, QListWidget, QListWidgetItem
+    QWidget, QVBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox, QProgressBar, QListWidget, QListWidgetItem,
+    QSizePolicy, QAbstractItemView
 )
-from PyQt6.QtCore import Qt, QSize, QMimeData, QTimer
-from PyQt6.QtGui import QPixmap, QImage, QDrag
+from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtGui import QPixmap, QImage
 from PIL import Image
 import os
 
@@ -14,7 +15,7 @@ class ImageToPDFConverter(QWidget):
         self.setWindowTitle("Converter Imagem para PDF")
         self.setGeometry(100, 100, 800, 600)
 
-        # Layout
+        # Layout principal
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
 
@@ -23,6 +24,10 @@ class ImageToPDFConverter(QWidget):
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label.setStyleSheet("font-size: 20px; font-weight: bold; padding: 20px;")
         self.layout.addWidget(self.label)
+
+        # Layout dos Botões
+        self.button_layout = QVBoxLayout()
+        self.layout.addLayout(self.button_layout)
 
         # Botão de Seleção
         self.select_button = QPushButton("Selecionar Imagens")
@@ -43,15 +48,7 @@ class ImageToPDFConverter(QWidget):
             }
             """
         )
-        self.layout.addWidget(self.select_button)
-
-        # Barra de Progresso
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setTextVisible(True)
-        self.progress_bar.setMaximum(100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setVisible(False)
-        self.layout.addWidget(self.progress_bar)
+        self.button_layout.addWidget(self.select_button)
 
         # Botão de Conversão
         self.convert_button = QPushButton("Converter para PDF")
@@ -73,7 +70,7 @@ class ImageToPDFConverter(QWidget):
             }
             """
         )
-        self.layout.addWidget(self.convert_button)
+        self.button_layout.addWidget(self.convert_button)
 
         # Botão de Voltar
         self.back_button = QPushButton("Voltar ao Menu")
@@ -94,7 +91,15 @@ class ImageToPDFConverter(QWidget):
             }
             """
         )
-        self.layout.addWidget(self.back_button)
+        self.button_layout.addWidget(self.back_button)
+
+        # Barra de Progresso
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(False)
+        self.button_layout.addWidget(self.progress_bar)
 
         # Área de Exibição de Miniaturas
         self.thumbnail_list = QListWidget()
@@ -171,12 +176,14 @@ class ImageToPDFConverter(QWidget):
                 thumbnail_item_widget.setFixedSize(120, 120)
                 self.thumbnail_list.addItem(thumbnail_item)
                 self.thumbnail_list.setItemWidget(thumbnail_item, thumbnail_item_widget)
+                thumbnail_item.setData(Qt.ItemDataRole.UserRole, image_path)  # Armazena o caminho da imagem
 
             except Exception as e:
                 QMessageBox.warning(self, "Aviso", f"Falha ao carregar miniatura para {os.path.basename(image_path)}: {e}")
 
     def convert_images(self):
         if not self.image_paths:
+            QMessageBox.warning(self, "Aviso", "Nenhuma imagem selecionada para conversão.")
             return
 
         self.progress_bar.setVisible(True)
@@ -185,7 +192,10 @@ class ImageToPDFConverter(QWidget):
         pdf_files = []
         total_images = len(self.image_paths)
         
-        for idx, image_path in enumerate(self.image_paths):
+        # Obtemos os caminhos das imagens na ordem atual da lista
+        ordered_image_paths = [item.data(Qt.ItemDataRole.UserRole) for item in self.thumbnail_list.findItems('*', Qt.MatchFlag.MatchWildcard)]
+
+        for idx, image_path in enumerate(ordered_image_paths):
             try:
                 with Image.open(image_path) as img:
                     img = img.convert('RGB')  # Converte a imagem para o modo RGB se necessário

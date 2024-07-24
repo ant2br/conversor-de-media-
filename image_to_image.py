@@ -1,62 +1,29 @@
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QPushButton, QLabel, QFileDialog, QComboBox, QMessageBox, QSpacerItem, QSizePolicy,
-    QHBoxLayout, QListWidget, QProgressBar
+    QWidget, QVBoxLayout, QPushButton, QLabel, QFileDialog, QComboBox, QMessageBox, QSizePolicy,
+    QScrollArea, QGridLayout, QProgressBar, QSpacerItem
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QImage, QPixmap
-from PIL import Image
-import os
-
-class WorkerThread(QThread):
-    progress = pyqtSignal(int)
-    finished = pyqtSignal()
-
-    def __init__(self, image_paths, output_format):
-        super().__init__()
-        self.image_paths = image_paths
-        self.output_format = output_format
-
-    def run(self):
-        successful_conversions = []
-        failed_conversions = []
-
-        for idx, image_path in enumerate(self.image_paths):
-            try:
-                img = Image.open(image_path)
-                
-                # Converte para o formato de saída escolhido
-                if img.mode != "RGB" and self.output_format == "JPEG":
-                    img = img.convert("RGB")
-
-                save_path = os.path.splitext(image_path)[0] + f".{self.output_format.lower()}"
-                img.save(save_path, self.output_format)
-                successful_conversions.append(os.path.basename(save_path))
-                
-            except Exception as e:
-                failed_conversions.append(f"{os.path.basename(image_path)}: {e}")
-            
-            # Atualiza o progresso
-            progress = int((idx + 1) / len(self.image_paths) * 100)
-            self.progress.emit(progress)
-
-        # Finaliza a execução
-        self.finished.emit()
-        self.successful_conversions = successful_conversions
-        self.failed_conversions = failed_conversions
 
 class ImageToImageConverter(QWidget):
     def __init__(self, parent_app):
         super().__init__()
 
         self.parent_app = parent_app
-        self.setWindowTitle("Converter Imagem para Imagem")
-        self.setGeometry(100, 100, 600, 500)  # Aumenta o tamanho da janela para acomodar os campos maiores
+        self.image_paths = []
 
-        # Layout
+        self.init_ui()
+        self.worker = None
+
+    def init_ui(self):
+        self.setWindowTitle("Converter Imagem para Imagem")
+        self.setGeometry(100, 100, 800, 600)  # Tamanho da janela
+
+        # Layout principal
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
 
-        # Adiciona um espaçador acima do label
+        # Espaçador
         self.layout.addItem(QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
 
         # Label
@@ -65,7 +32,7 @@ class ImageToImageConverter(QWidget):
         self.label.setStyleSheet("font-size: 20px; font-weight: bold; padding: 15px;")
         self.layout.addWidget(self.label)
 
-        # Adiciona um espaçador entre o label e o botão de seleção
+        # Espaçador
         self.layout.addItem(QSpacerItem(20, 15, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
 
         # Botão de Seleção
@@ -82,7 +49,7 @@ class ImageToImageConverter(QWidget):
         )
         self.layout.addWidget(self.select_button)
 
-        # Adiciona um espaçador entre o botão de seleção e o combo box
+        # Espaçador
         self.layout.addItem(QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
 
         # Formato de Entrada
@@ -110,8 +77,16 @@ class ImageToImageConverter(QWidget):
         self.preview_label.setStyleSheet("font-size: 16px;")
         self.layout.addWidget(self.preview_label)
 
-        self.preview_list = QListWidget()
-        self.layout.addWidget(self.preview_list)
+        # Container para o layout de imagens
+        self.preview_container = QWidget()
+        self.preview_layout = QGridLayout(self.preview_container)
+        self.preview_container.setLayout(self.preview_layout)
+        
+        # Área de rolagem para o layout de imagens
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setWidget(self.preview_container)
+        self.layout.addWidget(self.scroll_area)
 
         # Barra de Progresso
         self.progress_bar = QProgressBar()
@@ -134,7 +109,7 @@ class ImageToImageConverter(QWidget):
         )
         self.layout.addWidget(self.convert_button)
 
-        # Adiciona um espaçador entre o botão de conversão e o botão de voltar
+        # Espaçador
         self.layout.addItem(QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
 
         # Botão de Voltar
@@ -151,12 +126,6 @@ class ImageToImageConverter(QWidget):
         )
         self.layout.addWidget(self.back_button)
 
-        # Inicializa a lista de imagens
-        self.image_paths = []
-
-        # Configura o WorkerThread
-        self.worker = None
-
     def select_images(self):
         new_image_paths, _ = QFileDialog.getOpenFileNames(
             self, "Selecionar Imagens", "", "Image Files (*.png *.jpg *.jpeg *.bmp *.gif *.tiff)"
@@ -168,25 +137,63 @@ class ImageToImageConverter(QWidget):
             self.convert_button.setEnabled(True)
 
     def preview_images(self):
-            self.preview_list.clear()
-            for path in self.image_paths:
-                try:
-                    # Cria um item para a lista
-                    list_item = QListWidgetItem()
-                    
-                    # Cria um QLabel para a imagem
-                    image_label = QLabel()
-                    img = QImage(path)
-                    pixmap = QPixmap.fromImage(img).scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio)
-                    
-                    # Configura o QLabel com o QPixmap
-                    image_label.setPixmap(pixmap)
-                    
-                    # Configura o item da lista para mostrar o QLabel
-                    self.preview_list.addItem(list_item)
-                    self.preview_list.setItemWidget(list_item, image_label)
-                except Exception:
+        # Remover todos os widgets do layout
+        while self.preview_layout.count():
+            item = self.preview_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        # Definir o tamanho máximo para o Pixmap
+        max_size = 300
+
+        # Adicionar as imagens ao layout de grade
+        row = 0
+        col = 0
+        total_height = 0
+        num_images = len(self.image_paths)
+        
+        for path in self.image_paths:
+            try:
+                # Cria um QLabel para a imagem
+                image_label = QLabel()
+                img = QImage(path)
+                
+                if img.isNull():
+                    print(f"Imagem não carregada: {path}")
                     continue
+
+                # Calcula o tamanho do Pixmap mantendo a proporção
+                original_size = img.size()
+                if original_size.width() > original_size.height():
+                    scaled_size = QSize(max_size, max_size * original_size.height() // original_size.width())
+                else:
+                    scaled_size = QSize(max_size * original_size.width() // original_size.height(), max_size)
+
+                pixmap = QPixmap.fromImage(img).scaled(scaled_size, Qt.AspectRatioMode.KeepAspectRatio)
+                
+                # Configura o QLabel com o QPixmap
+                image_label.setPixmap(pixmap)
+                image_label.setFixedSize(pixmap.size())  # Ajusta o tamanho do QLabel para o tamanho do Pixmap
+
+                # Adiciona o QLabel ao layout de grade
+                self.preview_layout.addWidget(image_label, row, col)
+                
+                # Atualiza a posição na grade
+                col += 1
+                if col > 2:  # Mudar para a próxima linha a cada 3 imagens
+                    col = 0
+                    row += 1
+
+                # Atualiza a altura total
+                total_height = (row + 1) * (max_size + 10)  # Adiciona uma margem para espaçamento
+
+            except Exception as e:
+                print(f"Erro ao carregar a imagem {path}: {e}")
+                continue
+        
+        # Ajusta a altura mínima do QScrollArea
+        self.scroll_area.setMinimumHeight(total_height)
+
     def convert_images(self):
         output_format = self.output_format.currentText().upper()
         if output_format not in ["JPEG", "PNG"]:
@@ -216,4 +223,3 @@ class ImageToImageConverter(QWidget):
     def go_back(self):
         self.close()
         self.parent_app.show()
-

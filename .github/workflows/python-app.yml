@@ -1,0 +1,48 @@
+name: Build Executable
+
+on:
+  push:
+    branches:
+      - main  # Altere para o nome da branch principal do seu repositório
+  pull_request:
+    branches:
+      - main  # Altere para o nome da branch principal do seu repositório
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'  # Defina a versão do Python necessária
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyqt6 pillow pyinstaller
+
+    - name: Build the executable
+      run: |
+        pyinstaller --onefile --name "conversor_de_media" main.py
+
+    - name: Upload executable to GitHub Releases
+      uses: actions/upload-release-asset@v1
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./dist/conversor_de_media.exe
+        asset_name: conversor_de_media.exe
+        asset_content_type: application/octet-stream
+
+    - name: Create GitHub Release
+      id: create_release
+      uses: actions/create-release@v1
+      with:
+        tag_name: v1.0.0
+        release_name: "Release v1.0.0"
+        draft: false
+        prerelease: false
